@@ -12,17 +12,12 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 
-#interface gráfica com Tkinterecho "# DownloadXMLNf-e" >> README.md
-git init
-git add README.md
-git commit -m "first commit"
-git branch -M main
-git remote add origin https://github.com/JannioFSantos/DownloadXMLNf-e.git
-git push -u origin main
+#interface gráfica com Tkinter 
+
 class NFeDownloaderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Downloader de NF-e")
+        self.root.title("Downloader de NF-e por JannioFSantos")
         self.root.geometry("500x600")  # Aumentei a altura para acomodar nova funcionalidade
 
         # Cria abas
