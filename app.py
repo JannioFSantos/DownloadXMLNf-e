@@ -5,11 +5,15 @@ import os
 import time
 import re
 import threading
+import subprocess
+import zipfile
+import io
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
 
 #interface gráfica com Tkinter 
@@ -87,6 +91,136 @@ class NFeDownloaderApp:
         progress = (current / total) * 100 if total > 0 else 0
         self.update_progress(progress, f"Baixando: {filename}")
 
+    def get_chrome_version(self):
+        """Obtém a versão do Chrome instalado."""
+        try:
+            # Tenta obter a versão do Chrome usando o comando do Windows
+            result = subprocess.run(
+                ['reg', 'query', 'HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon', '/v', 'version'],
+                capture_output=True, text=True, encoding='utf-8'
+            )
+            
+            if result.returncode == 0:
+                # Extrai a versão do resultado do comando reg
+                match = re.search(r'version\s+REG_SZ\s+(\d+\.\d+\.\d+\.\d+)', result.stdout)
+                if match:
+                    return match.group(1)
+            
+            # Se não encontrar via registro, tenta o caminho padrão do Chrome
+            chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+            if os.path.exists(chrome_path):
+                result = subprocess.run(
+                    [chrome_path, '--version'],
+                    capture_output=True, text=True, encoding='utf-8'
+                )
+                if result.returncode == 0:
+                    match = re.search(r'(\d+\.\d+\.\d+\.\d+)', result.stdout)
+                    if match:
+                        return match.group(1)
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Erro ao obter versão do Chrome: {e}")
+            return None
+
+    def download_chromedriver(self, chrome_version):
+        """Baixa o ChromeDriver compatível com a versão do Chrome usando Chrome for Testing."""
+        try:
+            # Extrai a versão principal (ex: 140.0.7339.128 -> 140)
+            major_version = chrome_version.split('.')[0]
+            
+            # URL para obter informações das versões disponíveis
+            versions_url = "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
+            
+            print(f"🔍 Buscando ChromeDriver compatível para Chrome {chrome_version}...")
+            response = requests.get(versions_url)
+            if response.status_code != 200:
+                raise Exception(f"Falha ao obter informações das versões: {response.status_code}")
+            
+            versions_data = response.json()
+            
+            # Encontra a versão mais recente compatível com a versão principal do Chrome
+            compatible_versions = []
+            for version_info in versions_data['versions']:
+                if version_info['version'].startswith(f"{major_version}."):
+                    compatible_versions.append(version_info)
+            
+            if not compatible_versions:
+                raise Exception(f"Nenhuma versão do ChromeDriver encontrada para Chrome {major_version}.*")
+            
+            # Pega a versão mais recente
+            latest_version_info = compatible_versions[-1]
+            chromedriver_version = latest_version_info['version']
+            print(f"✅ Versão do ChromeDriver encontrada: {chromedriver_version}")
+            
+            # Encontra o download para Windows
+            download_url = None
+            for download in latest_version_info['downloads']['chromedriver']:
+                if download['platform'] == 'win32':
+                    download_url = download['url']
+                    break
+            
+            if not download_url:
+                raise Exception("Download para Windows não encontrado")
+            
+            print(f"📥 Baixando ChromeDriver {chromedriver_version}...")
+            response = requests.get(download_url)
+            if response.status_code != 200:
+                raise Exception(f"Falha ao baixar ChromeDriver: {response.status_code}")
+            
+            # Extrai o arquivo ZIP
+            with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
+                zip_file.extractall(".")
+            
+            print("✅ ChromeDriver baixado e extraído com sucesso!")
+            return chromedriver_version
+            
+        except Exception as e:
+            print(f"❌ Erro ao baixar ChromeDriver: {e}")
+            raise
+
+    def setup_chromedriver(self):
+        """Configura o ChromeDriver correto para a versão do Chrome instalado."""
+        try:
+            # Obtém a versão do Chrome
+            chrome_version = self.get_chrome_version()
+            if not chrome_version:
+                raise Exception("Não foi possível detectar a versão do Chrome")
+            
+            print(f"✅ Chrome detectado: versão {chrome_version}")
+            
+            # Verifica se já temos um ChromeDriver compatível
+            chromedriver_path = "chromedriver.exe"
+            if os.path.exists(chromedriver_path):
+                # Verifica se o ChromeDriver atual é compatível
+                try:
+                    result = subprocess.run(
+                        [chromedriver_path, '--version'],
+                        capture_output=True, text=True, encoding='utf-8'
+                    )
+                    if result.returncode == 0:
+                        current_version = re.search(r'(\d+\.\d+\.\d+\.\d+)', result.stdout)
+                        if current_version:
+                            current_major = current_version.group(1).split('.')[0]
+                            chrome_major = chrome_version.split('.')[0]
+                            
+                            if current_major == chrome_major:
+                                print(f"✅ ChromeDriver {current_version.group(1)} já está compatível")
+                                return chromedriver_path
+                except:
+                    pass  # Se falhar, vamos baixar um novo
+            
+            # Se não for compatível, baixa o correto
+            print("⚠️  ChromeDriver incompatível ou não encontrado, baixando versão correta...")
+            self.download_chromedriver(chrome_version)
+            
+            return chromedriver_path
+            
+        except Exception as e:
+            print(f"❌ Erro ao configurar ChromeDriver: {e}")
+            raise
+
     def download_nfe_meudanfe(self, nfe_key):
         """Faz o download da NF-e usando automação web com Selenium e XPaths específicos."""
         try:
@@ -116,8 +250,12 @@ class NFeDownloaderApp:
             }
             chrome_options.add_experimental_option("prefs", prefs)
             
-            # Inicializa o WebDriver
-            driver = webdriver.Chrome(options=chrome_options)
+            # Configura e obtém o ChromeDriver correto
+            chromedriver_path = self.setup_chromedriver()
+            
+            # Inicializa o WebDriver com o ChromeDriver configurado
+            service = Service(chromedriver_path)
+            driver = webdriver.Chrome(service=service, options=chrome_options)
             driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
             try:
