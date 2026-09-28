@@ -1,0 +1,10 @@
+{
+  "name": "janniofsantos/downloadxmlnf-e",
+  "description": "Backend de Distribuição DF-e para o DownloadXMLNf-e Desktop",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.1",
+    "nfephp-org/sped-nfe": "^5.1"
+  }
+}
