@@ -1,3 +1,2 @@
-requests>=2.25.0
-cryptography>=3.0
-selenium>=4.35.0
+# A interface desktop usa apenas a biblioteca padrão do Python (Tkinter).
+# O backend fiscal é PHP/NFePHP e é instalado via Composer.
