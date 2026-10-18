@@ -1,0 +1,9 @@
+vendor/
+__pycache__/
+*.pyc
+*.pfx
+*.p12
+.nfe-state-*.json
+dist/
+build/
+*.spec
